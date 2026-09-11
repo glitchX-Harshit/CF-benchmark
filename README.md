@@ -4,11 +4,24 @@ ClozFlow is a sales intelligence platform focused on understanding sales convers
 
 ## Architecture
 
-This is a Turborepo monorepo containing:
-- `apps/web`: Next.js frontend (App Router, Tailwind)
-- `apps/api`: FastAPI backend
-- `packages/evaluation-engine`: Python library for deterministic and LLM-based rubric scoring.
-- `packages/*`: Shared configurations and types.
+This is a Python-first architecture.
+
+```text
+Frontend
+    React + Vite + Tailwind V4
+
+Backend
+    Python + FastAPI
+
+Intelligence
+    Python + CF Engine
+
+Database
+    PostgreSQL
+
+Infrastructure
+    Docker + Redis
+```
 
 ## Local Setup
 
@@ -19,7 +32,7 @@ This is a Turborepo monorepo containing:
 - Docker Desktop
 
 ### 1. Environment
-Copy `.env.example` to `.env` in `apps/api` and root.
+Copy `.env.example` to `.env` in the root.
 
 ### 2. Infrastructure
 Start the database and redis:
@@ -27,18 +40,22 @@ Start the database and redis:
 docker-compose up -d
 ```
 
-### 3. Frontend
-```bash
-pnpm install
-pnpm dev
-```
-
-### 4. Backend
-```bash
+### 3. Backend (FastAPI & CF Engine)
+```powershell
 python -m venv .venv
-# Activate venv (.venv\Scripts\Activate.ps1 or source .venv/bin/activate)
-pip install -e packages/evaluation-engine
-pip install -e apps/api
-cd apps/api
+.venv\Scripts\Activate.ps1
+pip install -e cf_engine
+pip install -e backend
+
+cd backend
 uvicorn app.main:app --reload --port 8000
 ```
+
+### 4. Frontend
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will run on `http://localhost:5173`.
