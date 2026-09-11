@@ -84,6 +84,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visi
 .title-dot { color: var(--acid); }
 .page-intro { max-width: 430px; color: var(--muted); font-size: 15px; line-height: 1.55; margin: 28px 0 0; }
 .primary-button, .feature-card__link { color: var(--ink); background: var(--acid); padding: 14px 17px; text-decoration: none; display: inline-flex; align-items: center; gap: 30px; font: 600 11px 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .08em; transition: box-shadow .25s ease, transform .25s ease; }
+.primary-button { color: #fff; }
 .primary-button:hover, .feature-card__link:hover { box-shadow: 5px 5px 0 var(--paper); }
 .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .metric-card { padding: 22px 22px 20px 0; border-right: 1px solid var(--line); margin: 20px 22px 20px 0; }
