@@ -46,13 +46,19 @@ class ColdCallEngine:
                 )
                 return signals, metadata
             except Exception as e:
+                import requests
+                # Check for quota/rate limit errors
+                if isinstance(e, requests.exceptions.HTTPError):
+                    if e.response.status_code in [429, 403]:
+                        raise RuntimeError("LLM_QUOTA_REACHED")
+                
                 # Log the exception locally if needed
                 print(f"LLM API Error: {e}")
                 if attempt == max_retries:
                     break
                 time.sleep(1) # simple backoff
                 
-        # If we failed all retries
+        # If we failed all retries for non-quota reasons
         metadata.analysis_mode = "deterministic_fallback"
         metadata.semantic_source = "deterministic_fallback"
         metadata.fallback_used = True

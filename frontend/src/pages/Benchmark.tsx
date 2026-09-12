@@ -46,10 +46,22 @@ export default function BenchmarkPage() {
       .catch(err => console.error("Failed to load scenarios:", err));
   }, []);
 
+  const [error, setError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState<number>(0);
+
+  useEffect(() => {
+    let timer: any;
+    if (cooldown > 0) {
+      timer = setInterval(() => setCooldown(c => c - 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
   const handleEvaluate = async () => {
-    if (!selectedScenario || !response) return;
+    if (!selectedScenario || !response || cooldown > 0) return;
     setLoading(true);
     setEvaluation(null);
+    setError(null);
 
     try {
       const res = await fetch("/api/v1/evaluate/cold-call", {
@@ -70,10 +82,23 @@ export default function BenchmarkPage() {
           use_llm: true
         })
       });
+      
       const data = await res.json();
+      
+      if (!res.ok) {
+        if (res.status === 429) {
+          setError("⚠️ LLM Quota Reached. Your API key ran out of credits or hit a rate limit.");
+          setCooldown(60);
+        } else {
+          setError(data.detail || "An error occurred during evaluation.");
+        }
+        return;
+      }
+      
       setEvaluation(data);
     } catch (err) {
       console.error(err);
+      setError("Failed to connect to the server.");
     } finally {
       setLoading(false);
     }
@@ -257,13 +282,23 @@ export default function BenchmarkPage() {
               />
             </div>
 
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 font-medium rounded-md text-sm">
+                {error}
+              </div>
+            )}
+            
             <button
               onClick={handleEvaluate}
-              disabled={loading || !response}
+              disabled={loading || !response || cooldown > 0}
               className="mt-8 w-full py-5 rounded-none font-bold text-lg flex items-center justify-center gap-3 transition-all relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed bg-[#5b3bc4] text-white hover:bg-[#3157a4]"
             >
               <span className="relative z-10 flex items-center gap-2">
-                {loading ? (
+                {cooldown > 0 ? (
+                  <>
+                    <span className="tabular-nums">Wait {cooldown}s</span>
+                  </>
+                ) : loading ? (
                   <>
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                     Analyzing...

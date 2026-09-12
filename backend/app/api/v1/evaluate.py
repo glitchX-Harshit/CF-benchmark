@@ -53,4 +53,6 @@ def evaluate_cold_call(request: ColdCallEvaluateRequest, db: Session = Depends(g
             report=report
         )
     except Exception as e:
+        if str(e) == "LLM_QUOTA_REACHED":
+            raise HTTPException(status_code=429, detail="LLM Quota or Rate Limit Reached. Please try again later or upgrade your API key.")
         raise HTTPException(status_code=500, detail=str(e))
