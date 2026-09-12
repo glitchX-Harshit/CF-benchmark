@@ -1,21 +1,39 @@
 import { motion } from "framer-motion";
 import { ArrowUpRight, BarChart3, Check, CircleArrowOutUpRight, MessageSquare, TrendingUp, Users, Zap } from "lucide-react";
 
-const stats = [
-  { label: "Conversations analyzed", value: "1,248", change: "+12.5%", icon: MessageSquare },
-  { label: "Average response score", value: "76.4", change: "+3.2%", icon: TrendingUp },
-  { label: "Benchmark runs", value: "342", change: "+28.4%", icon: BarChart3 },
-  { label: "Active prospects", value: "89", change: "-2.1%", icon: Users },
-];
-
-const evaluations = [
-  { company: "Acme Corp", objection: "Price objection", time: "2 hours ago", score: 84 },
-  { company: "Globex", objection: "Missing feature", time: "5 hours ago", score: 62 },
-  { company: "Initech", objection: "Competitor preference", time: "1 day ago", score: 92 },
-  { company: "Soylent", objection: "Timeline push", time: "2 days ago", score: 45 },
-];
+import { useState, useEffect } from "react";
 
 export default function Dashboard() {
+  const [stats, setStats] = useState([
+    { label: "Conversations analyzed", value: "-", change: "", icon: MessageSquare },
+    { label: "Average response score", value: "-", change: "", icon: TrendingUp },
+    { label: "Benchmark scenarios", value: "-", change: "", icon: BarChart3 },
+    { label: "Active prospects", value: "-", change: "", icon: Users },
+  ]);
+  const [evaluations, setEvaluations] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("http://localhost:8000/api/v1/evaluations/stats")
+      .then(res => res.json())
+      .then(data => {
+        // Map string names back to icons
+        const iconMap: any = {
+            "MessageSquare": MessageSquare,
+            "TrendingUp": TrendingUp,
+            "BarChart3": BarChart3,
+            "Users": Users
+        };
+        if(data.stats) {
+            setStats(data.stats.map((s: any) => ({...s, icon: iconMap[s.icon] || MessageSquare})));
+        }
+      })
+      .catch(err => console.error(err));
+
+    fetch("http://localhost:8000/api/v1/evaluations/recent")
+      .then(res => res.json())
+      .then(data => setEvaluations(data))
+      .catch(err => console.error(err));
+  }, []);
   return (
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .6, ease: "easeOut" }} className="dashboard">
       <header className="page-header">
@@ -58,7 +76,7 @@ export default function Dashboard() {
       </div>
       <div className="workspace-grid">
         <section className="evaluations-card">
-          <div className="card-label">Latest signals <span>04 entries</span></div>
+          <div className="card-label">Latest signals <span>{evaluations.length} entries</span></div>
           {evaluations.map((item) => (
             <motion.div key={item.company} whileHover={{ x: 6 }} className="evaluation-row">
               <span className={`score-badge ${item.score > 75 ? "score-badge--good" : item.score > 50 ? "score-badge--mid" : "score-badge--low"}`}>{item.score}</span>
