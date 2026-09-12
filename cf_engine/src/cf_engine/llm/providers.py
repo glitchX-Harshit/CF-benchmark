@@ -7,7 +7,7 @@ from .schemas import SemanticSignals
 from .prompts import SEMANTIC_INTERPRETATION_PROMPT
 
 class GeminiProvider(LLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-1.5-flash"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-3.5-flash"):
         self.api_key = api_key or os.environ.get("CF_LLM_API_KEY")
         self.model = model
         self.timeout = int(os.environ.get("CF_LLM_TIMEOUT_SECONDS", "20"))

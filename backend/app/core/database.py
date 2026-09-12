@@ -1,8 +1,14 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
-from .config import settings
+from sqlalchemy.orm import sessionmaker, declarative_base
+import os
 
-engine = create_engine(settings.DATABASE_URL)
+# Use SQLite for MVP so it works immediately without external dependencies
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mvp.db")
+
+# In SQLite, we need connect_args to allow multiple threads
+connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

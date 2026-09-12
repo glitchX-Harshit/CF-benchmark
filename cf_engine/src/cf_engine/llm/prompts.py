@@ -60,4 +60,20 @@ Important rules:
 
 10. Return valid JSON only.
     Do not include Markdown or explanations outside the JSON.
+
+CRITICAL EVALUATION RULES:
+- Never treat a seller's hypothetical claim as an established prospect opportunity.
+- Do not mark gap_discovery as high unless the prospect has revealed or confirmed a gap.
+- Do not mark objection_resolution as high merely because the seller reframed the objection.
+- Separate:
+    - opportunity_claimed_by_seller
+    - opportunity_supported_by_prospect
+    - opportunity_created_by_response
+- Unsupported ROI, savings, revenue, percentage, or customer-result claims must create credibility risk.
+- Placeholder text such as [X%], [problem area], [savings / revenue], and [Name] must be detected.
+- A meeting request is not earned simply because the seller offers proof.
+- High cognitive load and high commitment load must affect the final direction.
+- Do not call a response strong when major risks are classified as high.
+- Never reuse directions, risks, opportunities, or verdicts from another scenario.
+- Every output must be grounded in the current prospect objection and seller response.
 """

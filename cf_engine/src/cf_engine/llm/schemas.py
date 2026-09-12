@@ -1,102 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal, List
 
-class SemanticFlags(BaseModel):
-    acknowledges_prospect: bool = False
-    validates_prospect: bool = False
-    reduces_resistance: bool = False
-    reduces_replacement_fear: bool = False
-    respects_existing_solution: bool = False
-    positions_as_complementary: bool = False
-    attacks_existing_solution: bool = False
-    relevant_discovery_question: bool = False
-    multiple_questions: bool = False
-    creates_continuation_opening: bool = False
-    creates_current_solution_opening: bool = False
-    creates_adoption_opening: bool = False
-    creates_pain_opening: bool = False
-    creates_gap_opening: bool = False
-    contains_product_pitch: bool = False
-    pitch_is_premature: bool = False
-    pitch_is_relevant: bool = False
-
-class DirectionalInterpretation(BaseModel):
-    resistance_tendency: int = Field(0, ge=-100, le=100)
-    progression_tendency: int = Field(0, ge=-100, le=100)
-
-class SemanticSignals(BaseModel):
-    objection_type: Literal[
-        "none",
-        "price",
-        "time",
-        "existing_solution",
-        "no_need",
-        "lack_of_interest",
-        "authority",
-        "trust",
-        "timing",
-        "competitor",
-        "unclear"
-    ] = "unclear"
-
-    seller_intent: List[Literal[
-        "acknowledge",
-        "validate",
-        "clarify",
-        "reduce_resistance",
-        "reduce_replacement_fear",
-        "respect_existing_solution",
-        "position_complementary",
-        "discover_current_solution",
-        "discover_adoption",
-        "discover_pain",
-        "discover_gap",
-        "qualify",
-        "build_relevance",
-        "pitch_value",
-        "pitch_product",
-        "handle_objection",
-        "create_continuation",
-        "pressure",
-        "close",
-        "unclear"
-    ]] = Field(default_factory=list)
-
-    semantic_signals: SemanticFlags = Field(default_factory=SemanticFlags)
-
-    likely_prospect_state: Literal[
-        "interested",
-        "curious",
-        "engaged",
-        "neutral",
-        "skeptical",
-        "defensive",
-        "dismissive",
-        "rushed",
-        "confused",
-        "unclear"
-    ] = "unclear"
-
-    directional_interpretation: DirectionalInterpretation = Field(default_factory=DirectionalInterpretation)
-
-    cognitive_load: Literal[
-        "low",
-        "moderate",
-        "high",
-        "unclear"
-    ] = "unclear"
-
-    conversational_cost: Literal[
-        "low",
-        "moderate",
-        "high",
-        "unclear"
-    ] = "unclear"
-
-    strengths: List[str] = Field(default_factory=list, max_length=5)
-    weaknesses: List[str] = Field(default_factory=list, max_length=5)
-    
-    opened_opportunities: List[Literal[
+class OpportunitySignal(BaseModel):
+    type: Literal[
         "objection_resolution",
         "current_solution",
         "adoption",
@@ -108,26 +14,111 @@ class SemanticSignals(BaseModel):
         "qualification",
         "continuation",
         "commercial",
-        "meeting_progression"
-    ]] = Field(default_factory=list, max_length=6)
-    
-    weakened_opportunities: List[str] = Field(default_factory=list, max_length=5)
-    
-    risk_triggers: List[Literal[
-        "defensiveness",
-        "rejection",
-        "loss_of_attention",
-        "premature_pitch",
-        "confusion",
-        "cognitive_overload",
-        "scripted_tone",
-        "irrelevant_pitch",
-        "pressure",
-        "credibility_loss",
-        "relevance_loss",
-        "shutdown",
-        "none"
-    ]] = Field(default_factory=list, max_length=6)
+        "meeting_progression",
+        "unclear"
+    ]
+    evidence_status: Literal[
+        "confirmed_by_prospect",
+        "created_by_response",
+        "seller_claimed",
+        "unsupported",
+        "not_established"
+    ]
 
-    semantic_summary: str = ""
-    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    @field_validator("type", "evidence_status", mode="before")
+    def lowercase_enums(cls, v):
+        if isinstance(v, str):
+            return v.lower().strip()
+        return v
+
+class SemanticSignals(BaseModel):
+    objection_type: Literal[
+        "none", "price", "time", "existing_solution", "no_need",
+        "lack_of_interest", "authority", "trust", "timing", "competitor", "unclear"
+    ] = "unclear"
+
+    acknowledges_prospect: bool = False
+    validates_prospect: bool = False
+    reduces_resistance: bool = False
+    reduces_replacement_fear: bool = False
+    contains_product_pitch: bool = False
+    pitch_is_premature: bool = False
+    contains_unsupported_claim: bool = False
+    contains_placeholders: bool = False
+    asks_relevant_discovery: bool = False
+    asks_multiple_questions: bool = False
+    creates_continuation_opening: bool = False
+    creates_pain_discovery_opening: bool = False
+    creates_gap_discovery_opening: bool = False
+    
+    likely_prospect_state: Literal[
+        "interested", "curious", "engaged", "neutral", "skeptical",
+        "defensive", "dismissive", "rushed", "confused", "unclear"
+    ] = "unclear"
+
+    cognitive_load: Literal["low", "moderate", "high", "unclear"] = "unclear"
+    conversational_cost: Literal["low", "moderate", "high", "unclear"] = "unclear"
+    
+    opportunities: List[OpportunitySignal] = Field(default_factory=list)
+
+    risk_triggers: List[Literal[
+        "defensiveness", "rejection", "loss_of_attention", "premature_pitch",
+        "confusion", "cognitive_overload", "scripted_tone", "irrelevant_pitch",
+        "pressure", "credibility_loss", "relevance_loss", "shutdown", "none"
+    ]] = Field(default_factory=list)
+
+    @field_validator(
+        "objection_type", "likely_prospect_state", "cognitive_load", "conversational_cost",
+        mode="before"
+    )
+    def lowercase_enums(cls, v):
+        if isinstance(v, str):
+            return v.lower().strip()
+        return v
+
+    @field_validator("risk_triggers", mode="before")
+    def normalize_risk_triggers(cls, v):
+        if not v:
+            return []
+        if isinstance(v, list):
+            # lowercase, strip, remove nulls, deduplicate, and sort deterministically
+            v = [x.lower().strip() for x in v if isinstance(x, str)]
+            v = sorted(list(set(v)))
+            return v
+        return v
+
+    @field_validator("opportunities", mode="before")
+    def normalize_opportunities(cls, v):
+        if not v:
+            return []
+        if isinstance(v, list):
+            # deduplicate by type to ensure determinism, and sort
+            unique = {}
+            for item in v:
+                if isinstance(item, dict):
+                    t = str(item.get("type", "")).lower().strip()
+                    e = str(item.get("evidence_status", "")).lower().strip()
+                    if t and t not in unique:
+                        unique[t] = {"type": t, "evidence_status": e}
+                elif isinstance(item, OpportunitySignal):
+                    t = item.type
+                    e = item.evidence_status
+                    if t not in unique:
+                        unique[t] = {"type": t, "evidence_status": e}
+            
+            # sort by type string
+            return [OpportunitySignal(**unique[k]) for k in sorted(unique.keys())]
+        return v
+
+    @field_validator(
+        "acknowledges_prospect", "validates_prospect", "reduces_resistance",
+        "reduces_replacement_fear", "contains_product_pitch", "pitch_is_premature",
+        "contains_unsupported_claim", "contains_placeholders", "asks_relevant_discovery",
+        "asks_multiple_questions", "creates_continuation_opening", "creates_pain_discovery_opening",
+        "creates_gap_discovery_opening",
+        mode="before"
+    )
+    def normalize_bools(cls, v):
+        if isinstance(v, str):
+            return v.lower().strip() in ("true", "1", "yes")
+        return bool(v)

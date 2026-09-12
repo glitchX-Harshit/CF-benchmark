@@ -3,6 +3,10 @@ from typing import Any, Optional, Literal
 from cf_engine.models.cold_call import ConversationInput, CFReport
 from cf_engine.evaluators.cold_call_engine import ColdCallEngine
 from pydantic import BaseModel
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # Load variables from .env into os.environ
 
 router = APIRouter()
 engine = ColdCallEngine()

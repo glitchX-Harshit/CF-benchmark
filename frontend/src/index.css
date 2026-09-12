@@ -164,6 +164,18 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visi
 .benchmark-header__copy h1 { margin-left: 0; }
 .benchmark-header__copy p:last-child { margin-left: 0; }
 .panel-kicker { color: var(--acid); font: 10px 'DM Mono', monospace; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 14px; }
+.direction-graph { width: 100%; padding: 18px; background: var(--paper); border: 1px solid var(--ink); text-align: left; }
+.direction-graph--compact { max-width: 390px; margin-bottom: 24px; background: #d3c8eb; border-color: rgba(23,23,23,.35); }
+.direction-graph__topline { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font: 9px 'DM Mono', monospace; letter-spacing: .1em; }
+.direction-graph__topline strong { color: var(--acid); font: 24px 'Archivo Black', sans-serif; letter-spacing: -.06em; }
+.direction-graph__topline small { color: var(--muted); font: 9px 'DM Mono', monospace; margin-left: 3px; letter-spacing: 0; }
+.direction-graph svg { display: block; width: 100%; height: auto; margin-top: 14px; overflow: visible; }
+.direction-graph__axis, .direction-graph__grid { fill: none; stroke: rgba(23,23,23,.25); stroke-width: 1; }
+.direction-graph__grid { stroke-dasharray: 2 4; }
+.direction-graph__line { fill: none; stroke: var(--acid); stroke-width: 3; stroke-linecap: square; stroke-linejoin: bevel; stroke-dasharray: 500; stroke-dashoffset: 500; animation: draw-signal 1.4s ease-out forwards; }
+.direction-graph__point { fill: var(--paper); stroke: var(--acid); stroke-width: 2; }
+.direction-graph__labels { display: flex; justify-content: space-between; color: var(--muted); font: 8px 'DM Mono', monospace; letter-spacing: .07em; margin-top: 5px; }
+@keyframes draw-signal { to { stroke-dashoffset: 0; } }
 .scenario-picker { position: relative; z-index: 5; }
 .scenario-picker__trigger { width: 100%; min-height: 78px; border: 1px solid var(--line); background: #d3c8eb; color: var(--ink); display: grid; grid-template-columns: 1fr auto; text-align: left; padding: 15px 18px; cursor: pointer; transition: border-color .2s ease, background .2s ease; }
 .scenario-picker__trigger:hover, .scenario-picker__trigger.is-open { border-color: var(--acid); background: #c9b9e7; }

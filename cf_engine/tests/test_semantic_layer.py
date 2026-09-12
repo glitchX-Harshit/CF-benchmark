@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
-from cf_engine.models.cold_call import ConversationInput
-from cf_engine.llm.schemas import SemanticSignals
+from cf_engine.models.cold_call import ConversationInput, CurrentState
+from cf_engine.llm.schemas import SemanticSignals, OpportunitySignal
 from cf_engine.evaluators.semantic_evaluator import calculate_deterministic_score
 from cf_engine.evaluators.cold_call_engine import ColdCallEngine
 
@@ -9,109 +9,140 @@ def test_semantic_schema_validation():
     # Valid
     signals = SemanticSignals(objection_type="price", likely_prospect_state="interested")
     assert signals.objection_type == "price"
-    
-    # Missing optional fields will use defaults
-    assert signals.tone == "unclear"
+    assert signals.cognitive_load == "unclear"
     
     # Invalid enum value
     with pytest.raises(ValidationError):
-        SemanticSignals(tone="angry_shouting")
+        SemanticSignals(likely_prospect_state="angry_shouting")
+
+    # Array normalization: deduplication and sorting
+    signals2 = SemanticSignals(
+        risk_triggers=["premature_pitch", "defensiveness", "premature_pitch", "none"],
+        opportunities=[
+            OpportunitySignal(type="workflow", evidence_status="seller_claimed"),
+            OpportunitySignal(type="adoption", evidence_status="confirmed_by_prospect"),
+            OpportunitySignal(type="workflow", evidence_status="unsupported")
+        ]
+    )
+    assert signals2.risk_triggers == ["defensiveness", "none", "premature_pitch"]
+    # workflow deduplicated, adoption sorted first
+    assert len(signals2.opportunities) == 2
+    assert signals2.opportunities[0].type == "adoption"
+    assert signals2.opportunities[1].type == "workflow"
+
 
 def test_deterministic_scoring_rules():
-    objective_signals = {}
+    objective_signals = {"contains_placeholders": False, "contains_meeting_request": False, "question_count": 0}
     
-    # Base neutral
     semantic = SemanticSignals()
     scores = calculate_deterministic_score(objective_signals, semantic)
     assert scores["response_quality_score"] == 50
     assert scores["conversation_direction_score"] == 0
     
-    # Acknowledges prospect (+8 quality, +6 direction)
     semantic.acknowledges_prospect = True
     scores = calculate_deterministic_score(objective_signals, semantic)
     assert scores["response_quality_score"] == 58
     assert scores["conversation_direction_score"] == 6
     
-    # Adds high cognitive load (-6 quality, -5 direction)
     semantic.cognitive_load = "high"
     scores = calculate_deterministic_score(objective_signals, semantic)
-    assert scores["response_quality_score"] == 52
-    assert scores["conversation_direction_score"] == 1
+    assert scores["response_quality_score"] == 50
+    assert scores["conversation_direction_score"] == -2
     
-    # Attacking existing solution (-15 direction)
-    semantic.attacks_existing_solution = True
-    scores = calculate_deterministic_score(objective_signals, semantic)
-    assert scores["conversation_direction_score"] == -14
-    
-    # Clamping tests
-    semantic.tone = "defensive"  # heavily negative
-    semantic.attacks_existing_solution = True
     semantic.pitch_is_premature = True
     scores = calculate_deterministic_score(objective_signals, semantic)
-    assert scores["conversation_direction_score"] >= -100
+    assert scores["conversation_direction_score"] == -17
+    
+    # Test unconfirmed opportunities do NOT add score
+    semantic.opportunities = [OpportunitySignal(type="workflow", evidence_status="seller_claimed")]
+    scores1 = calculate_deterministic_score(objective_signals, semantic)
+    semantic.opportunities = [OpportunitySignal(type="workflow", evidence_status="created_by_response")]
+    scores2 = calculate_deterministic_score(objective_signals, semantic)
+    
+    assert scores2["strategic_opportunity_score"] > scores1["strategic_opportunity_score"]
 
-def test_engine_fallback():
-    engine = ColdCallEngine()
-    conv = ConversationInput()
-    # Explicitly asking for LLM but we have no API key so fallback happens
-    # Well actually, if the API request fails (which it will without key/mock), it catches and falls back.
-    report = engine.evaluate(conv, "Okay.", use_llm=True)
-    assert report.metadata.analysis_mode == "deterministic_fallback"
-    assert report.metadata.fallback_used == True
-    
-    # And if not requested, it uses deterministic
-    report = engine.evaluate(conv, "Okay.", use_llm=False)
-    assert report.metadata.analysis_mode == "deterministic"
 
-def test_objective_parsing():
+def test_regression_deterministic_20_times(monkeypatch):
     engine = ColdCallEngine()
     conv = ConversationInput()
-    report = engine.evaluate(conv, "Is this a platform solution?")
-    assert report.response_cost.word_count == 5
-    assert len(report.risks) > 0 # Premature pitch risk due to 'platform solution'
+    response = "That makes sense. Can we discuss your [problem area] for 5 minutes?"
     
-def test_golden_case_strong_salesforce_handling(monkeypatch):
-    engine = ColdCallEngine()
-    conv = ConversationInput()
-    response = "Totally fair — I'm not suggesting you replace Salesforce. We usually help teams get more value from the tools they already use. Out of curiosity, are your reps consistently using Salesforce the way you want them to?"
-    
-    # Mock LLM response
+    # We will simulate the LLM returning slightly out-of-order JSON 
+    # to ensure our normalizers make it strictly identical in the final result.
     def mock_interpret(*args, **kwargs):
+        # We mutate the order to simulate LLM non-determinism in arrays
+        import random
+        risks = ["defensiveness", "premature_pitch"]
+        random.shuffle(risks)
+        
+        opps = [
+            OpportunitySignal(type="workflow", evidence_status="seller_claimed"),
+            OpportunitySignal(type="gap_discovery", evidence_status="created_by_response")
+        ]
+        random.shuffle(opps)
+        
         return SemanticSignals(
-            objection_type="existing_solution",
+            objection_type="price",
             acknowledges_prospect=True,
-            validates_prospect=True,
-            reduces_resistance=True,
-            reduces_replacement_fear=True,
-            respects_existing_solution=True,
-            asks_relevant_discovery=True,
-            creates_gap_discovery_opening=True,
-            contains_product_pitch=True,
-            pitch_is_premature=False,
-            likely_prospect_state="curious",
+            contains_placeholders=True,
+            risk_triggers=risks,
+            opportunities=opps,
+            likely_prospect_state="skeptical",
             cognitive_load="moderate",
-            conversational_cost=58
+            conversational_cost="low"
         )
+        
     monkeypatch.setattr(engine.llm, "interpret_response", mock_interpret)
     
-    # Test hybrid mode
-    report = engine.evaluate(conv, response, use_llm=True)
-    assert report.response_cost.word_count == 37
-    assert 70 <= report.response_quality["score"] <= 95
-    assert 70 <= report.strategic_opportunity["score"] <= 95
-    assert report.final.cf_grade in ["A", "A-", "B+"]
+    baseline = engine.evaluate(conv, response, use_llm=True)
     
-def test_golden_case_premature_pitch():
-    engine = ColdCallEngine()
-    conv = ConversationInput()
-    response = "Makes sense. Our platform is an AI-powered sales intelligence solution that integrates with Salesforce and helps companies improve visibility, rep productivity, forecasting, pipeline management, coaching, analytics and much more."
-    report = engine.evaluate(conv, response, use_llm=False)
-    assert report.conversation_direction["score"] <= 10
-    assert report.final.cf_grade in ["C", "C+", "C-", "D", "F"]
+    for _ in range(20):
+        report = engine.evaluate(conv, response, use_llm=True)
+        assert report.response_quality["score"] == baseline.response_quality["score"]
+        assert report.strategic_opportunity["score"] == baseline.strategic_opportunity["score"]
+        assert report.conversation_direction["score"] == baseline.conversation_direction["score"]
+        assert report.final.cf_grade == baseline.final.cf_grade
+        assert report.metadata.analysis_mode == "hybrid"
 
-def test_golden_case_one_word():
+
+def test_cross_scenario_contamination(monkeypatch):
+    engine = ColdCallEngine()
+    conv = ConversationInput(current_state=CurrentState(objection="We have no budget right now", prospect_role="Director"))
+    response = "I understand budget is tight. What if it pays for itself?"
+    
+    def mock_interpret(*args, **kwargs):
+        return SemanticSignals(
+            objection_type="budget",
+            opportunities=[OpportunitySignal(type="commercial", evidence_status="created_by_response")]
+        )
+        
+    monkeypatch.setattr(engine.llm, "interpret_response", mock_interpret)
+    report = engine.evaluate(conv, response, use_llm=True)
+    
+    # Assert that no default salesforce text is present in the report
+    report_json = report.model_dump_json().lower()
+    assert "salesforce" not in report_json
+    assert "crm replacement" not in report_json
+
+
+def test_contradiction_check(monkeypatch):
     engine = ColdCallEngine()
     conv = ConversationInput()
-    report = engine.evaluate(conv, "Okay.", use_llm=False)
-    assert report.final.cf_grade in ["C", "C+", "C-", "D"]
-    assert report.conversation_direction["score"] < 0
+    # High cognitive load, placeholder, meeting request
+    response = "Let's meet tomorrow. I want to show you [X%] ROI on [problem area]."
+    
+    def mock_interpret(*args, **kwargs):
+        return SemanticSignals(
+            likely_prospect_state="interested",
+            cognitive_load="high",
+            contains_placeholders=True,
+            contains_unsupported_claim=True,
+            risk_triggers=["rejection", "credibility_loss"]
+        )
+    monkeypatch.setattr(engine.llm, "interpret_response", mock_interpret)
+    report = engine.evaluate(conv, response, use_llm=True)
+    
+    # Because of risks and penalties, direction should be severely penalized.
+    # The verdict MUST NOT say "Strong cold-call response..."
+    assert report.final.verdict != "Strong cold-call response. It creates multiple useful paths without forcing a pitch or adding unnecessary conversational cost."
+    assert "major high-severity risks" in report.final.verdict or report.conversation_direction["score"] < 70

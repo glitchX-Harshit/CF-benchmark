@@ -1,13 +1,37 @@
-import { useState, useEffect, useCallback } from "react";
-import { useDropzone } from "react-dropzone";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, UploadCloud, X, CheckCircle2, AlertCircle, Bot, User, Sparkles, Activity, ChevronRight, ChevronDown, Check } from "lucide-react";
+import { CheckCircle2, AlertCircle, User, Sparkles, ChevronDown, Check } from "lucide-react";
+
+function DirectionGraph({ score = 62, compact = false }: { score?: number; compact?: boolean }) {
+  const points = compact
+    ? "8,92 42,76 74,81 108,52 142,61 176,28 210,38"
+    : "8,118 54,100 96,108 138,73 180,84 222,44 264,58 308,20";
+
+  return (
+    <div className={`direction-graph ${compact ? "direction-graph--compact" : ""}`}>
+      <div className="direction-graph__topline">
+        <span>{compact ? "LIVE SIGNAL PATH" : "DIRECTION / RESPONSE MOMENTUM"}</span>
+        <strong>{score}<small>/100</small></strong>
+      </div>
+      <svg viewBox="0 0 316 132" role="img" aria-label="Response direction graph">
+        <line x1="8" y1="118" x2="308" y2="118" className="direction-graph__axis" />
+        <line x1="8" y1="78" x2="308" y2="78" className="direction-graph__grid" />
+        <line x1="8" y1="38" x2="308" y2="38" className="direction-graph__grid" />
+        <polyline points={points} className="direction-graph__line" />
+        {points.split(" ").map((point, index) => {
+          const [cx, cy] = point.split(",");
+          return <circle key={point} cx={cx} cy={cy} r={index === points.split(" ").length - 1 ? 4 : 2.5} className="direction-graph__point" />;
+        })}
+      </svg>
+      <div className="direction-graph__labels"><span>OPEN</span><span>UNCERTAIN</span><span>MOVE FORWARD</span></div>
+    </div>
+  );
+}
 
 export default function BenchmarkPage() {
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<any | null>(null);
   const [response, setResponse] = useState("");
-  const [file, setFile] = useState<File | null>(null);
   const [evaluation, setEvaluation] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
@@ -21,23 +45,6 @@ export default function BenchmarkPage() {
       })
       .catch(err => console.error("Failed to load scenarios:", err));
   }, []);
-
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      setFile(acceptedFiles[0]);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setResponse(reader.result as string);
-      };
-      reader.readAsText(acceptedFiles[0]);
-    }
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
-    onDrop,
-    accept: { 'text/plain': ['.txt'], 'application/pdf': ['.pdf'] },
-    maxFiles: 1
-  });
 
   const handleEvaluate = async () => {
     if (!selectedScenario || !response) return;
@@ -59,7 +66,8 @@ export default function BenchmarkPage() {
             },
             previous_messages: []
           },
-          seller_response: response
+          seller_response: response,
+          use_llm: true
         })
       });
       const data = await res.json();
@@ -82,7 +90,7 @@ export default function BenchmarkPage() {
           <span className="benchmark-header__cross">+</span>
           <span className="benchmark-header__ring" />
           <span className="benchmark-header__figure"><i /><b /><em /></span>
-          <span className="benchmark-header__label">OBSERVE / RESPOND / LEARN</span>
+          <span className="benchmark-header__label">SIGNAL / DIRECTION / NEXT MOVE</span>
         </div>
         <div className="benchmark-header__copy">
           <p className="eyebrow"><span className="eyebrow__line" /> CF Benchmark / 02</p>
@@ -175,23 +183,51 @@ export default function BenchmarkPage() {
                   <div className="p-6 rounded-none bg-[#dfe5f0] border border-[#171717]/15 space-y-4">
                     <div className="flex gap-4 items-start">
                       <div className="mt-1 p-2 rounded-none bg-[#b6c7e8] text-[#171717]"><User className="w-4 h-4" /></div>
-                      <div>
-                        <div className="text-xs text-[#6d6a63] uppercase tracking-wider font-semibold mb-1">Prospect</div>
-                        <div className="text-sm font-medium">{selectedScenario.prospect_context.role} • {selectedScenario.prospect_context.industry}</div>
+                      <div className="w-full">
+                        <div className="text-xs text-[#6d6a63] uppercase tracking-wider font-semibold mb-1">Prospect (Editable)</div>
+                        <div className="flex items-center">
+                          <input 
+                            value={selectedScenario.prospect_context.role || ""} 
+                            onChange={e => setSelectedScenario({...selectedScenario, prospect_context: {...selectedScenario.prospect_context, role: e.target.value}})}
+                            className="text-sm font-medium bg-transparent border-b border-transparent hover:border-[#171717]/30 focus:border-[#5b3bc4] outline-none w-auto max-w-[150px] transition-colors"
+                          />
+                          <span className="text-sm font-medium mx-2">•</span>
+                          <input 
+                            value={selectedScenario.prospect_context.industry || ""} 
+                            onChange={e => setSelectedScenario({...selectedScenario, prospect_context: {...selectedScenario.prospect_context, industry: e.target.value}})}
+                            className="text-sm font-medium bg-transparent border-b border-transparent hover:border-[#171717]/30 focus:border-[#5b3bc4] outline-none w-auto transition-colors"
+                          />
+                        </div>
                       </div>
                     </div>
                     
                     <div className="flex gap-4 items-start">
                       <div className="mt-1 p-2 rounded-none bg-[#b6c7e8] text-[#171717]"><AlertCircle className="w-4 h-4" /></div>
-                      <div>
-                        <div className="text-xs text-[#6d6a63] uppercase tracking-wider font-semibold mb-1">Context</div>
-                        <div className="text-sm font-medium">{selectedScenario.conversation_context.stage} stage • Pain: {selectedScenario.conversation_context.pain_points.join(", ")}</div>
+                      <div className="w-full">
+                        <div className="text-xs text-[#6d6a63] uppercase tracking-wider font-semibold mb-1">Context (Editable)</div>
+                        <div className="flex items-center">
+                          <input 
+                            value={selectedScenario.conversation_context.stage || ""} 
+                            onChange={e => setSelectedScenario({...selectedScenario, conversation_context: {...selectedScenario.conversation_context, stage: e.target.value}})}
+                            className="text-sm font-medium bg-transparent border-b border-transparent hover:border-[#171717]/30 focus:border-[#5b3bc4] outline-none w-auto max-w-[100px] transition-colors"
+                          />
+                          <span className="text-sm font-medium mx-2">stage • Pain:</span>
+                          <input 
+                            value={selectedScenario.conversation_context.pain_points.join(", ")} 
+                            onChange={e => setSelectedScenario({...selectedScenario, conversation_context: {...selectedScenario.conversation_context, pain_points: e.target.value.split(", ")}})}
+                            className="text-sm font-medium bg-transparent border-b border-transparent hover:border-[#171717]/30 focus:border-[#5b3bc4] outline-none flex-1 transition-colors"
+                          />
+                        </div>
                       </div>
                     </div>
 
                     <div className="mt-6 p-5 rounded-none bg-[#d9c5d3] border-l-4 border-[#5b3bc4]">
-                      <div className="text-xs text-[#5b3bc4] uppercase tracking-wider font-bold mb-2">The Objection</div>
-                      <div className="text-lg font-medium text-[#171717] italic">"{selectedScenario.objection.text}"</div>
+                      <div className="text-xs text-[#5b3bc4] uppercase tracking-wider font-bold mb-2">The Objection (Editable)</div>
+                      <textarea 
+                        value={selectedScenario.objection.text}
+                        onChange={e => setSelectedScenario({...selectedScenario, objection: {...selectedScenario.objection, text: e.target.value}})}
+                        className="text-lg font-medium text-[#171717] italic bg-transparent border border-transparent hover:border-[#5b3bc4]/30 focus:border-[#5b3bc4] outline-none w-full resize-none min-h-[80px] p-2 transition-colors rounded-sm"
+                      />
                     </div>
                   </div>
                 </motion.div>
@@ -255,11 +291,9 @@ export default function BenchmarkPage() {
                   exit={{ opacity: 0 }}
                   className="h-[600px] rounded-none border border-[#171717]/25 border-dashed flex flex-col items-center justify-center text-center p-10 bg-[#f4f0e7]"
                 >
-                  <div className="w-24 h-24 rounded-none bg-[#b6c7e8] flex items-center justify-center mb-6">
-                    <Activity className="w-10 h-10 text-[#3157a4]" />
-                  </div>
-                  <h3 className="text-xl font-bold text-[#171717] mb-2">Awaiting Input</h3>
-                  <p className="text-[#6d6a63]">Add a response and run the benchmark to see the detailed review here.</p>
+                  <DirectionGraph compact />
+                  <h3 className="text-xl font-bold text-[#171717] mb-2">Map the next move</h3>
+                  <p className="text-[#6d6a63]">Add a response and run the benchmark to plot its direction, quality, and opportunity.</p>
                 </motion.div>
               ) : evaluation.report ? (
                 /* NEW CFREPORT FORMAT */
@@ -308,9 +342,7 @@ export default function BenchmarkPage() {
                     
                     <div>
                         <div className="text-xs font-bold text-[#6d6a63] mb-2 uppercase">Direction Visual</div>
-                        <div className="p-3 bg-white border border-[#171717]/20 font-mono text-center tracking-widest text-[#3157a4]">
-                            {evaluation.report.direction_visual}
-                        </div>
+                        <DirectionGraph score={evaluation.report.final.cf_score} />
                     </div>
 
                     <div className="p-5 rounded-none bg-[#d9c5d3] border-l-4 border-[#5b3bc4]">

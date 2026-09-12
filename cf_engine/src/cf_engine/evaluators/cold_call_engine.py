@@ -74,13 +74,22 @@ class ColdCallEngine:
             conversational_cost=int(conversational_cost)
         )
         
+        contains_placeholders = bool(re.search(r'\[.*?\]', seller_response))
+        contains_percentage = bool(re.search(r'\b\d+\s*%', seller_response)) or "percent" in seller_response.lower()
+        contains_meeting_request = any(w in seller_response.lower() for w in ["minutes", "meeting", "chat", "discuss", "next tuesday", "tomorrow", "next week"])
+        contains_financial_reframing = any(w in seller_response.lower() for w in ["roi", "savings", "revenue", "budget back", "pay for itself"])
+
         objective_signals = {
             "word_count": word_count,
             "question_count": question_count,
             "estimated_seconds": estimated_seconds,
             "contains_question": question_count > 0,
             "contains_product_pitch": any(w in seller_response.lower() for w in ["platform", "solution", "integrate", "powered", "feature", "analytics", "much more"]),
-            "contains_acknowledgement_phrase": any(w in seller_response.lower() for w in ["got it", "makes sense", "understood", "okay", "i hear you"])
+            "contains_acknowledgement_phrase": any(w in seller_response.lower() for w in ["got it", "makes sense", "understood", "okay", "i hear you"]),
+            "contains_placeholders": contains_placeholders,
+            "contains_percentage": contains_percentage,
+            "contains_meeting_request": contains_meeting_request,
+            "contains_financial_reframing": contains_financial_reframing
         }
         
         metadata = CFReportMetadata(analysis_mode="deterministic", semantic_source="deterministic", llm_used=False, fallback_used=False)
@@ -108,30 +117,36 @@ class ColdCallEngine:
             conversation_direction_score = scores["conversation_direction_score"]
             
             # Map semantic risk triggers
-            risks = [RiskItem(type="Detected Risk", severity="medium", reason=r) for r in semantic.risk_triggers]
-            opened = [OpportunityItem(type="Semantic Opportunity", strength=80, reason=o, reachable_direction="positive") for o in semantic.opened_opportunities]
-            missed = [OpportunityItem(type="Missed Opportunity", strength=50, reason=o, reachable_direction="neutral") for o in semantic.missed_opportunities]
+            risks = [RiskItem(type="Detected Risk", severity="high" if r in ["rejection", "shutdown"] else "medium", reason=r) for r in semantic.risk_triggers]
+            if objective_signals.get("contains_placeholders"):
+                risks.append(RiskItem(type="Credibility Risk", severity="high", reason="Contains template placeholders"))
+            
+            opened = []
+            missed = []
+            for opp in semantic.opportunities:
+                if opp.evidence_status in ["confirmed_by_prospect", "created_by_response"]:
+                    opened.append(OpportunityItem(type=opp.type, strength=80, reason=f"Status: {opp.evidence_status}", reachable_direction="positive"))
+                else:
+                    missed.append(OpportunityItem(type=opp.type, strength=30, reason=f"Status: {opp.evidence_status}", reachable_direction="neutral"))
             
             eff_eng = "HIGH" if semantic.likely_prospect_state in ["interested", "engaged"] else "MEDIUM" if semantic.likely_prospect_state in ["curious", "neutral"] else "LOW"
             eff_cur = "HIGH" if semantic.likely_prospect_state in ["curious"] else "LOW" if semantic.likely_prospect_state in ["defensive", "dismissive"] else "MEDIUM"
             eff_res = "HIGH" if semantic.likely_prospect_state in ["defensive", "skeptical", "dismissive"] else "LOW"
-            eff_tru = "HIGH" if semantic.tone in ["reassuring", "calm"] else "LOW" if semantic.tone in ["aggressive", "pressuring"] else "MEDIUM"
-            eff_rel = "HIGH" if semantic.creates_relevance_opening else "MEDIUM"
+            eff_tru = "HIGH" if semantic.likely_prospect_state in ["engaged", "interested"] else "LOW" if semantic.likely_prospect_state in ["defensive", "dismissive"] else "MEDIUM"
+            eff_rel = "HIGH" if semantic.asks_relevant_discovery else "MEDIUM"
             eff_con = "HIGH" if semantic.creates_continuation_opening else "LOW"
             
             reaction_label = "Likely " + semantic.likely_prospect_state.capitalize()
-            reaction_expl = semantic.semantic_summary or "Semantic interpretation from model."
+            reaction_expl = "Based on semantic evaluation."
             
             # Use semantic fields for some cost overwriting if confident
             if semantic.cognitive_load == "low": response_cost.cognitive_load = min(response_cost.cognitive_load, 30)
             elif semantic.cognitive_load == "high": response_cost.cognitive_load = max(response_cost.cognitive_load, 70)
 
-            # We can't let the LLM return fake possible directions out of thin air, but if it has them, we'd use them. 
-            # In our schema we didn't specify exactly a list of possible_directions, just opened_opportunities.
-            # So we build some generic ones based on the LLM state.
             possible_directions = []
-            for op in semantic.opened_opportunities:
-                possible_directions.append(DirectionItem(direction=f"Prospect may explore: {op}", likelihood_tendency="HIGH", explanation="Opportunity created."))
+            for op in opened:
+                possible_directions.append(DirectionItem(direction=f"Prospect may explore: {op.type}", likelihood_tendency="HIGH", explanation="Opportunity created."))
+
             for risk in semantic.risk_triggers:
                 possible_directions.append(DirectionItem(direction=f"Prospect may disengage due to: {risk}", likelihood_tendency="LOW", explanation="Risk introduced."))
             if not possible_directions:
@@ -162,17 +177,11 @@ class ColdCallEngine:
             elif is_acknowledgement and not has_question and has_multiple_questions:
                 conversation_direction_score -= 20
                 
-            # Specific golden cases checking (deterministic fallback overrides)
-            if "are you pretty happy with how your reps are using salesforce" in seller_response.lower():
-                response_quality_score = 78
-                strategic_opportunity_score = 84
-                conversation_direction_score = 71
-                
             # Opportunities
             opened = []
             if has_question and not is_pitch:
-                opened.append(OpportunityItem(type="Current solution discussion", strength=80, reason="Open question allows prospect to elaborate.", reachable_direction="positive"))
-                opened.append(OpportunityItem(type="Rep adoption discussion", strength=85, reason="Relevant to current tools.", reachable_direction="positive"))
+                opened.append(OpportunityItem(type="Current situation discussion", strength=80, reason="Open question allows prospect to elaborate.", reachable_direction="positive"))
+                opened.append(OpportunityItem(type="Workflow discussion", strength=85, reason="Relevant to current tools or processes.", reachable_direction="positive"))
                 opened.append(OpportunityItem(type="Potential pain discovery", strength=70, reason="Allows revealing gaps.", reachable_direction="positive"))
                 opened.append(OpportunityItem(type="Gap identification", strength=70, reason="Gaps might be shown.", reachable_direction="positive"))
 
@@ -201,12 +210,15 @@ class ColdCallEngine:
                 reaction_expl = "Does not create strong progression or strong resistance."
                 eff_eng, eff_cur, eff_res, eff_tru, eff_rel, eff_con = "MEDIUM", "LOW", "LOW", "MEDIUM", "MEDIUM", "MEDIUM"
 
+            obj = conversation.current_state.objection if conversation.current_state and conversation.current_state.objection else "the objection"
+            role = conversation.current_state.prospect_role if conversation.current_state and conversation.current_state.prospect_role else "Prospect"
+            
             possible_directions=[
-                DirectionItem(direction="Prospect discusses current Salesforce usage.", likelihood_tendency="HIGH", explanation="Question prompts response"),
-                DirectionItem(direction="Prospect reveals adoption problems.", likelihood_tendency="MEDIUM", explanation="If unhappy."),
-                DirectionItem(direction="Prospect confirms satisfaction.", likelihood_tendency="HIGH", explanation="If happy."),
-                DirectionItem(direction="Prospect gives a short dismissal.", likelihood_tendency="LOW", explanation="If busy."),
-                DirectionItem(direction="Conversation can move toward a workflow or gap discussion.", likelihood_tendency="MEDIUM", explanation="Depending on response.")
+                DirectionItem(direction=f"{role} answers the seller's question.", likelihood_tendency="HIGH", explanation="If the question is relevant and easy to answer."),
+                DirectionItem(direction=f"{role} reiterates concern about {obj}.", likelihood_tendency="MEDIUM", explanation="If the response didn't reduce resistance."),
+                DirectionItem(direction=f"{role} asks for clarification.", likelihood_tendency="MEDIUM", explanation="If the response was confusing or introduced new concepts."),
+                DirectionItem(direction=f"{role} gives a short dismissal.", likelihood_tendency="LOW", explanation="If they remain busy or defensive."),
+                DirectionItem(direction="Conversation can move toward a workflow or gap discussion.", likelihood_tendency="MEDIUM", explanation="If the prospect engages with the response.")
             ]
 
         # Common Bounds Check
@@ -257,8 +269,13 @@ class ColdCallEngine:
         visual = "REJECTION " + "-" * norm + "o" + "-" * (24 - norm) + " PROGRESSION"
 
         # Verdict logic
+        has_high_risk = any(r.severity == "high" for r in risks) if 'risks' in locals() else False
+        
         if conversation_direction_score >= 70:
-            verdict = "Strong cold-call response. It creates multiple useful paths without forcing a pitch or adding unnecessary conversational cost."
+            if has_high_risk:
+                verdict = "The response creates strategic progression, but contains major high-severity risks that threaten the conversation."
+            else:
+                verdict = "Strong cold-call response. It creates multiple useful paths without forcing a pitch or adding unnecessary conversational cost."
         elif conversation_direction_score >= 30:
             verdict = "The response generally supports progression but has identifiable weaknesses."
         elif conversation_direction_score >= -20:
@@ -267,6 +284,24 @@ class ColdCallEngine:
             verdict = "Creates resistance. The prospect may disengage due to friction."
         else:
             verdict = "Highly likely to shorten or damage the conversation. Specific rejection triggers detected."
+
+        # Hashing and Logging
+        import hashlib
+        import json
+        import logging
+        
+        logger = logging.getLogger("cf_engine")
+        
+        sig_dump = semantic.model_dump_json() if semantic else "{}"
+        obj_text = json.dumps(conversation.current_state.model_dump() if conversation.current_state else {})
+        raw_str = f"{obj_text}_{seller_response}_{sig_dump}"
+        content_hash = hashlib.sha256(raw_str.encode('utf-8')).hexdigest()[:12]
+        
+        logger.info(f"--- CF Engine Run [{content_hash}] ---")
+        logger.info(f"Mode: {metadata.analysis_mode}")
+        logger.info(f"Scores: Quality={response_quality_score}, Strategic={strategic_opportunity_score}, Direction={conversation_direction_score}")
+        logger.info(f"Final Score: {final_cf_score}")
+        logger.info(f"Normalized Signals: {sig_dump}")
 
         return CFReport(
             seller_response=seller_response,
