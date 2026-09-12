@@ -13,7 +13,7 @@ export default function Dashboard() {
   const [evaluations, setEvaluations] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/evaluations/stats")
+    fetch("/api/v1/evaluations/stats")
       .then(res => res.json())
       .then(data => {
         // Map string names back to icons
@@ -29,7 +29,7 @@ export default function Dashboard() {
       })
       .catch(err => console.error(err));
 
-    fetch("http://localhost:8000/api/v1/evaluations/recent")
+    fetch("/api/v1/evaluations/recent")
       .then(res => res.json())
       .then(data => setEvaluations(data))
       .catch(err => console.error(err));

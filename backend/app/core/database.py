@@ -3,7 +3,11 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
 # Use SQLite for MVP so it works immediately without external dependencies
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mvp.db")
+if os.getenv("VERCEL") == "1":
+    # Vercel filesystem is read-only except for /tmp
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////tmp/mvp.db")
+else:
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mvp.db")
 
 # In SQLite, we need connect_args to allow multiple threads
 connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}

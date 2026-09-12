@@ -37,7 +37,7 @@ export default function BenchmarkPage() {
   const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/benchmarks/scenarios")
+    fetch("/api/v1/benchmarks/scenarios")
       .then(res => res.json())
       .then(data => {
         setScenarios(data);
@@ -52,7 +52,7 @@ export default function BenchmarkPage() {
     setEvaluation(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/evaluate/cold-call", {
+      const res = await fetch("/api/v1/evaluate/cold-call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
