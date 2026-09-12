@@ -26,6 +26,33 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 
-@app.get("/")
-def root():
-    return {"message": "Welcome to ClozFlow API"}
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Serve frontend statically if it exists (for Render / Production)
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist")
+
+if os.path.exists(frontend_dist):
+    # Mount the assets directory directly
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    
+    # Catch-all route to serve the SPA
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Ignore /api routes
+        if full_path.startswith("api/"):
+            return {"error": "API route not found"}
+            
+        file_path = os.path.join(frontend_dist, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+            
+        # Fallback to index.html for React Router
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+else:
+    @app.get("/")
+    def root():
+        return {"message": "Welcome to ClozFlow API. Frontend build not found."}

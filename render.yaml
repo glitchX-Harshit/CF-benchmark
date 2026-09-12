@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: clozflow-benchmark
+    env: docker
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////tmp/mvp.db
+      - key: RENDER
+        value: "1"
+      - key: PORT
+        value: "8000"

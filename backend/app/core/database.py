@@ -3,8 +3,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
 # Use SQLite for MVP so it works immediately without external dependencies
-if os.getenv("VERCEL") == "1":
-    # Vercel filesystem is read-only except for /tmp
+if os.getenv("VERCEL") == "1" or os.getenv("RENDER") == "1":
+    # Serverless/Cloud filesystem is read-only except for /tmp or ephemeral
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////tmp/mvp.db")
 else:
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mvp.db")
